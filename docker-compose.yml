@@ -2,6 +2,9 @@ services:
   hermes-init:
     image: alpine:3.20
     restart: "no"
+    environment:
+      HERMES_UID: ${HERMES_UID:-10000}
+      HERMES_GID: ${HERMES_GID:-10000}
     volumes:
       - hermes-data:/opt/data
     command:
@@ -173,7 +176,8 @@ services:
         # SLACK_BOT_TOKEN=
         EOF
         fi
-        chmod 700 /opt/data
+        chown -R "$${HERMES_UID}:$${HERMES_GID}" /opt/data
+        chmod -R u+rwX,go-rwx /opt/data
 
   hermes:
     build:
