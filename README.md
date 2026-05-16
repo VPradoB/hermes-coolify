@@ -3,7 +3,7 @@
 Plug-and-play Hermes Agent deployment for Coolify.
 
 This repo starts Hermes Gateway on a VPS with persistent state at `/opt/data`.
-It is designed for WhatsApp, Spotify, cron jobs, and future integrations such as Firefly III.
+It is designed for WhatsApp, Spotify, cron jobs, and Firefly III.
 
 ## Coolify Setup
 
@@ -68,6 +68,31 @@ State lives in:
 ```text
 /opt/data/whatsapp/
 ```
+
+## Firefly III
+
+Firefly is integrated as a Hermes skill plus a local helper command at:
+
+```text
+/opt/data/bin/firefly
+```
+
+Set these Coolify environment variables and redeploy:
+
+```env
+FIREFLY_BASE_URL=https://firefly.example.com
+FIREFLY_TOKEN=your_personal_access_token
+```
+
+Hermes can then use Firefly for account lookup, transaction summaries, and expense creation. Examples:
+
+```text
+lista mis cuentas de Firefly
+resumí mis gastos de este mes por categoría
+registrá gasto 45000 supermercado desde mi cuenta principal en categoría comida
+```
+
+The token is never committed. Keep it only in Coolify environment variables or `/opt/data/.env`.
 
 ## Dashboard
 

@@ -12,7 +12,7 @@ services:
       - -lc
       - |
         set -eu
-        mkdir -p /opt/data/logs /opt/data/whatsapp /opt/data/sessions /opt/data/audio_cache /opt/data/image_cache
+        mkdir -p /opt/data/logs /opt/data/whatsapp /opt/data/sessions /opt/data/audio_cache /opt/data/image_cache /opt/data/bin /opt/data/.hermes/skills/firefly
         if [ ! -f /opt/data/config.yaml ]; then
           sed 's/^        //' > /opt/data/config.yaml <<'EOF'
         model:
@@ -163,8 +163,8 @@ services:
         HERMES_SPOTIFY_CLIENT_ID=
         HERMES_SPOTIFY_REDIRECT_URI=http://127.0.0.1:43827/spotify/callback
 
-        # FIREFLY_BASE_URL=https://firefly.example.com
-        # FIREFLY_TOKEN=
+        FIREFLY_BASE_URL=
+        FIREFLY_TOKEN=
 
         # Optional API server. Do not expose without a strong key and proxy auth.
         # API_SERVER_HOST=0.0.0.0
@@ -176,6 +176,132 @@ services:
         # SLACK_BOT_TOKEN=
         EOF
         fi
+        cat > /opt/data/bin/firefly <<'EOF'
+        #!/usr/bin/env python3
+        import argparse
+        import json
+        import os
+        import urllib.error
+        import urllib.parse
+        import urllib.request
+
+        def env(name):
+            value = os.environ.get(name, "").strip()
+            if not value:
+                raise SystemExit(f"Missing {name}. Set it in Coolify environment variables and redeploy.")
+            return value
+
+        def request(method, path, body=None, query=None):
+            base_url = env("FIREFLY_BASE_URL").rstrip("/")
+            token = env("FIREFLY_TOKEN")
+            if query:
+                path = f"{path}?{urllib.parse.urlencode(query)}"
+            data = None
+            headers = {
+                "Accept": "application/vnd.api+json",
+                "Authorization": f"Bearer {token}",
+            }
+            if body is not None:
+                data = json.dumps(body).encode("utf-8")
+                headers["Content-Type"] = "application/json"
+            req = urllib.request.Request(f"{base_url}/api/v1{path}", data=data, headers=headers, method=method)
+            try:
+                with urllib.request.urlopen(req, timeout=30) as res:
+                    payload = res.read().decode("utf-8")
+                    return json.loads(payload) if payload else {}
+            except urllib.error.HTTPError as exc:
+                details = exc.read().decode("utf-8", errors="replace")
+                raise SystemExit(f"Firefly API error {exc.code}: {details}") from exc
+
+        def compact(resource):
+            data = resource.get("data", resource)
+            if isinstance(data, list):
+                return [{"id": item.get("id"), **item.get("attributes", {})} for item in data]
+            if isinstance(data, dict):
+                return {"id": data.get("id"), **data.get("attributes", {})}
+            return resource
+
+        def main():
+            parser = argparse.ArgumentParser(description="Firefly III helper for Hermes")
+            sub = parser.add_subparsers(dest="cmd", required=True)
+
+            sub.add_parser("about")
+            sub.add_parser("accounts")
+            tx = sub.add_parser("transactions")
+            tx.add_argument("--start")
+            tx.add_argument("--end")
+            tx.add_argument("--limit", default="25")
+
+            create = sub.add_parser("create-withdrawal")
+            create.add_argument("--amount", required=True)
+            create.add_argument("--description", required=True)
+            create.add_argument("--source", required=True, help="Source account name")
+            create.add_argument("--destination", required=True, help="Expense account/category name")
+            create.add_argument("--date", help="YYYY-MM-DD")
+            create.add_argument("--category")
+            create.add_argument("--notes")
+
+            args = parser.parse_args()
+            if args.cmd == "about":
+                result = request("GET", "/about")
+            elif args.cmd == "accounts":
+                result = compact(request("GET", "/accounts", query={"limit": 200}))
+            elif args.cmd == "transactions":
+                query = {"limit": args.limit}
+                if args.start:
+                    query["start"] = args.start
+                if args.end:
+                    query["end"] = args.end
+                result = compact(request("GET", "/transactions", query=query))
+            elif args.cmd == "create-withdrawal":
+                tx = {
+                    "type": "withdrawal",
+                    "amount": args.amount,
+                    "description": args.description,
+                    "source_name": args.source,
+                    "destination_name": args.destination,
+                }
+                if args.date:
+                    tx["date"] = args.date
+                if args.category:
+                    tx["category_name"] = args.category
+                if args.notes:
+                    tx["notes"] = args.notes
+                result = compact(request("POST", "/transactions", {"transactions": [tx]}))
+            else:
+                raise SystemExit("unknown command")
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+
+        if __name__ == "__main__":
+            main()
+        EOF
+        chmod 700 /opt/data/bin/firefly
+        sed 's/^        //' > /opt/data/.hermes/skills/firefly/SKILL.md <<'EOF'
+        ---
+        name: firefly
+        description: Use Firefly III for budgets, balances, expenses, transactions, and monthly finance summaries. Trigger when user mentions Firefly, gastos, finanzas, presupuesto, cuentas, balances, ingresos, egresos, or registering an expense.
+        ---
+
+        # Firefly III
+
+        Use `/opt/data/bin/firefly` to interact with Firefly III. Credentials come only from environment variables:
+
+        - `FIREFLY_BASE_URL`
+        - `FIREFLY_TOKEN`
+
+        Never print `FIREFLY_TOKEN`. If credentials are missing, tell user to set them in Coolify environment variables and redeploy.
+
+        Common commands:
+
+        ```bash
+        /opt/data/bin/firefly about
+        /opt/data/bin/firefly accounts
+        /opt/data/bin/firefly transactions --start YYYY-MM-DD --end YYYY-MM-DD --limit 50
+        /opt/data/bin/firefly create-withdrawal --amount "45000" --description "Supermercado" --source "Cuenta" --destination "Supermercado" --category "Comida" --date YYYY-MM-DD
+        ```
+
+        When creating expenses, confirm ambiguous fields first: source account, amount, description, category, and date. For read-only summaries, fetch transactions then summarize totals by category or account.
+        EOF
         chown -R "$${HERMES_UID}:$${HERMES_GID}" /opt/data
         chmod -R u+rwX,go-rwx /opt/data
 
@@ -193,6 +319,8 @@ services:
       HERMES_GID: ${HERMES_GID:-10000}
       HERMES_HOME: /opt/data
       TZ: ${TZ:-America/Asuncion}
+      FIREFLY_BASE_URL: ${FIREFLY_BASE_URL:-}
+      FIREFLY_TOKEN: ${FIREFLY_TOKEN:-}
     command: ["gateway", "run"]
 
   # Optional dashboard. Enable only behind Coolify auth/proxy.
