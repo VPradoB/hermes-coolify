@@ -12,7 +12,7 @@ services:
       - -lc
       - |
         set -eu
-        mkdir -p /opt/data/logs /opt/data/whatsapp /opt/data/sessions /opt/data/audio_cache /opt/data/image_cache /opt/data/bin /opt/data/.hermes/skills/firefly
+        mkdir -p /opt/data/logs /opt/data/whatsapp /opt/data/sessions /opt/data/audio_cache /opt/data/image_cache /opt/data/bin /opt/data/.hermes/skills/firefly /opt/data/skills/firefly
         if [ ! -f /opt/data/config.yaml ]; then
           sed 's/^        //' > /opt/data/config.yaml <<'EOF'
         model:
@@ -200,6 +200,7 @@ services:
             headers = {
                 "Accept": "application/vnd.api+json",
                 "Authorization": f"Bearer {token}",
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Hermes-Firefly/1.0",
             }
             if body is not None:
                 data = json.dumps(body).encode("utf-8")
@@ -302,6 +303,7 @@ services:
 
         When creating expenses, confirm ambiguous fields first: source account, amount, description, category, and date. For read-only summaries, fetch transactions then summarize totals by category or account.
         EOF
+        cp /opt/data/.hermes/skills/firefly/SKILL.md /opt/data/skills/firefly/SKILL.md
         chown -R "$${HERMES_UID}:$${HERMES_GID}" /opt/data
         chmod -R u+rwX,go-rwx /opt/data
 
