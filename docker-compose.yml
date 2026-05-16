@@ -4,7 +4,6 @@ services:
     restart: "no"
     volumes:
       - hermes-data:/opt/data
-      - ./seed:/seed:ro
     command:
       - /bin/sh
       - -lc
@@ -12,10 +11,167 @@ services:
         set -eu
         mkdir -p /opt/data/logs /opt/data/whatsapp /opt/data/sessions /opt/data/audio_cache /opt/data/image_cache
         if [ ! -f /opt/data/config.yaml ]; then
-          cp /seed/config.yaml /opt/data/config.yaml
+          sed 's/^        //' > /opt/data/config.yaml <<'EOF'
+        model:
+          default: gpt-5.4-mini
+          provider: openai-codex
+          base_url: https://chatgpt.com/backend-api/codex
+
+        providers: {}
+        fallback_providers: []
+        credential_pool_strategies: {}
+        toolsets:
+          - hermes-cli
+
+        agent:
+          max_turns: 60
+          gateway_timeout: 1800
+          restart_drain_timeout: 180
+          api_max_retries: 3
+          tool_use_enforcement: auto
+          disabled_toolsets: []
+          verbose: false
+          reasoning_effort: medium
+
+        terminal:
+          backend: local
+          cwd: /opt/data/workspace
+          timeout: 180
+          persistent_shell: true
+
+        web:
+          backend: firecrawl
+          use_gateway: false
+
+        browser:
+          engine: auto
+          cloud_provider: local
+          use_gateway: false
+          allow_private_urls: false
+
+        memory:
+          memory_enabled: true
+          user_profile_enabled: true
+          memory_char_limit: 2200
+          user_char_limit: 1375
+          provider: ""
+
+        display:
+          compact: false
+          personality: helpful
+          busy_input_mode: interrupt
+
+        approvals:
+          mode: manual
+          timeout: 60
+          cron_mode: deny
+          mcp_reload_confirm: true
+          destructive_slash_confirm: true
+
+        cron:
+          wrap_response: true
+          max_parallel_jobs: null
+
+        kanban:
+          dispatch_in_gateway: true
+          dispatch_interval_seconds: 60
+          failure_limit: 2
+
+        security:
+          allow_private_urls: false
+          redact_secrets: true
+          tirith_enabled: true
+          tirith_fail_open: true
+
+        platform_toolsets:
+          cli:
+            - browser
+            - clarify
+            - code_execution
+            - computer_use
+            - cronjob
+            - delegation
+            - file
+            - image_gen
+            - kanban
+            - memory
+            - messaging
+            - session_search
+            - skills
+            - spotify
+            - terminal
+            - todo
+            - tts
+            - vision
+            - web
+          whatsapp:
+            - browser
+            - clarify
+            - code_execution
+            - computer_use
+            - cronjob
+            - delegation
+            - file
+            - image_gen
+            - kanban
+            - memory
+            - messaging
+            - session_search
+            - skills
+            - spotify
+            - terminal
+            - todo
+            - tts
+            - vision
+            - web
+          telegram:
+            - hermes-telegram
+          discord:
+            - hermes-discord
+          slack:
+            - hermes-slack
+
+        known_plugin_toolsets:
+          cli:
+            - spotify
+          whatsapp:
+            - spotify
+
+        image_gen:
+          provider: openai-codex
+          use_gateway: false
+          model: gpt-image-2-medium
+
+        _config_version: 23
+        group_sessions_per_user: true
+        streaming:
+          enabled: false
+        EOF
         fi
         if [ ! -f /opt/data/.env ]; then
-          cp /seed/.env.example /opt/data/.env
+          sed 's/^        //' > /opt/data/.env <<'EOF'
+        # Fill values in Coolify's persistent volume, not in git.
+
+        # LLM provider auth:
+        # OPENROUTER_API_KEY=
+        # GOOGLE_API_KEY=
+        # GEMINI_API_KEY=
+
+        HERMES_SPOTIFY_CLIENT_ID=
+        HERMES_SPOTIFY_REDIRECT_URI=http://127.0.0.1:43827/spotify/callback
+
+        # FIREFLY_BASE_URL=https://firefly.example.com
+        # FIREFLY_TOKEN=
+
+        # Optional API server. Do not expose without a strong key and proxy auth.
+        # API_SERVER_HOST=0.0.0.0
+        # API_SERVER_KEY=
+
+        # Messaging platform secrets. Prefer Coolify secrets/env UI for these.
+        # TELEGRAM_BOT_TOKEN=
+        # DISCORD_BOT_TOKEN=
+        # SLACK_BOT_TOKEN=
+        EOF
         fi
         chmod 700 /opt/data
 
