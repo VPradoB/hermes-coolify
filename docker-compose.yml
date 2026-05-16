@@ -1,0 +1,58 @@
+services:
+  hermes-init:
+    image: alpine:3.20
+    restart: "no"
+    volumes:
+      - hermes-data:/opt/data
+      - ./seed:/seed:ro
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        set -eu
+        mkdir -p /opt/data/logs /opt/data/whatsapp /opt/data/sessions /opt/data/audio_cache /opt/data/image_cache
+        if [ ! -f /opt/data/config.yaml ]; then
+          cp /seed/config.yaml /opt/data/config.yaml
+        fi
+        if [ ! -f /opt/data/.env ]; then
+          cp /seed/.env.example /opt/data/.env
+        fi
+        chmod 700 /opt/data
+
+  hermes:
+    build:
+      context: https://github.com/NousResearch/hermes-agent.git
+    restart: unless-stopped
+    depends_on:
+      hermes-init:
+        condition: service_completed_successfully
+    volumes:
+      - hermes-data:/opt/data
+    environment:
+      HERMES_UID: ${HERMES_UID:-10000}
+      HERMES_GID: ${HERMES_GID:-10000}
+      HERMES_HOME: /opt/data
+      TZ: ${TZ:-America/Asuncion}
+    command: ["gateway", "run"]
+
+  # Optional dashboard. Enable only behind Coolify auth/proxy.
+  # hermes-dashboard:
+  #   build:
+  #     context: https://github.com/NousResearch/hermes-agent.git
+  #   restart: unless-stopped
+  #   depends_on:
+  #     hermes:
+  #       condition: service_started
+  #   volumes:
+  #     - hermes-data:/opt/data
+  #   environment:
+  #     HERMES_UID: ${HERMES_UID:-10000}
+  #     HERMES_GID: ${HERMES_GID:-10000}
+  #     HERMES_HOME: /opt/data
+  #     TZ: ${TZ:-America/Asuncion}
+  #   command: ["dashboard", "--host", "0.0.0.0", "--no-open"]
+  #   ports:
+  #     - "9119:9119"
+
+volumes:
+  hermes-data:
